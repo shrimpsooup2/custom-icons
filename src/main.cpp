@@ -458,8 +458,17 @@ struct $modify(CIGarageLayer, GJGarageLayer) {
         if (gm->getPlayerGlow()) {
             icon->setGlowOutline(gm->colorForIdx(gm->getPlayerGlowColor()));
         }
+        // SimplePlayer has no content size of its own (its layers are child
+        // sprites), so wrap it in a fixed-size node - otherwise the circle
+        // button's fit-to-size scaling divides by zero, clamps to max scale,
+        // and blows the player sprite up over the whole screen
+        auto wrapper = CCNode::create();
+        wrapper->setContentSize({ 30.f, 30.f });
+        wrapper->setAnchorPoint({ 0.5f, 0.5f });
+        icon->setPosition({ 15.f, 15.f });
+        wrapper->addChild(icon);
         auto spr = CircleButtonSprite::create(
-            icon, CircleBaseColor::Green, CircleBaseSize::Small);
+            wrapper, CircleBaseColor::Green, CircleBaseSize::Small);
         auto btn = CCMenuItemSpriteExtra::create(
             spr, this, menu_selector(CIGarageLayer::onCustomIcons));
         btn->setID("skins-button"_spr);
