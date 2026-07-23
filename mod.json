@@ -1,0 +1,10 @@
+{
+    "geode": "5.8.2",
+    "gd": { "win": "2.2081" },
+    "id": "andre.custom-icons",
+    "name": "Custom Icons",
+    "version": "v1.0.0",
+    "developer": "andre",
+    "description": "Upload PNG files as switchable skins (variations) for any icon.",
+    "tags": ["customization"]
+}
