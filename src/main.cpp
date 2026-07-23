@@ -83,9 +83,8 @@ static void removeFramesFromPlist(std::string const& plistFullPath) {
     if (!dict) return;
     if (auto frames = static_cast<CCDictionary*>(dict->objectForKey("frames"))) {
         auto sfc = CCSpriteFrameCache::sharedSpriteFrameCache();
-        CCDictElement* el = nullptr;
-        CCDICT_FOREACH(frames, el) {
-            sfc->removeSpriteFrameByName(el->getStrKey());
+        for (auto [key, value] : CCDictionaryExt<std::string, CCObject*>(frames)) {
+            sfc->removeSpriteFrameByName(key.c_str());
         }
     }
     dict->release();
