@@ -4,6 +4,7 @@
 #include <Geode/ui/Popup.hpp>
 #include <Geode/ui/ScrollLayer.hpp>
 #include <Geode/utils/file.hpp>
+#include <Geode/utils/async.hpp>
 #include <filesystem>
 #include <regex>
 
@@ -159,26 +160,24 @@ static std::string rewritePlist(std::string const& text, std::string const& base
 
 // ---------- UI ----------
 
-class VariationsPopup : public Popup<> {
+class VariationsPopup : public Popup {
 protected:
     IconType m_type = IconType::Cube;
-    GJGarageLayer* m_garage = nullptr;
+    Ref<GJGarageLayer> m_garage;
     CCLabelBMFont* m_typeLabel = nullptr;
     CCLabelBMFont* m_iconLabel = nullptr;
     ScrollLayer* m_scroll = nullptr;
     std::vector<std::string> m_entries;
     fs::path m_pendingPng;
-    EventListener<Task<Result<fs::path>>> m_pngListener;
-    EventListener<Task<Result<fs::path>>> m_plistListener;
 
-    bool setup() override {
+    bool init(GJGarageLayer* garage) {
+        if (!Popup::init(320.f, 250.f)) return false;
+        m_garage = garage;
         this->setTitle("Custom Icons");
         m_type = static_cast<IconType>(
             clampType(static_cast<int>(GameManager::get()->m_playerIconType)));
 
-        auto menu = CCMenu::create();
-        menu->setPosition({ 0.f, 0.f });
-        m_mainLayer->addChild(menu);
+        auto menu = m_buttonMenu;
 
         auto leftSpr = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png");
         leftSpr->setScale(0.65f);
@@ -300,14 +299,19 @@ protected:
     }
 
     void onAdd(CCObject*) {
-        file::FilePickOptions opts;
-        opts.filters.push_back({ "PNG image", { "*.png" } });
-        m_pngListener.bind([this](Task<Result<fs::path>>::Event* event) {
-            if (auto res = event->getValue()) {
-                if (res->isOk()) this->onImagePicked(res->unwrap());
+        async::spawn(
+            file::pick(file::PickMode::OpenFile, file::FilePickOptions {
+                .filters = { file::FilePickOptions::Filter {
+                    .description = "PNG image",
+                    .files = { "*.png" },
+                }}
+            }),
+            [self = Ref(this)](Result<std::optional<fs::path>> result) {
+                if (result.isOk()) {
+                    if (auto path = result.unwrap()) self->onImagePicked(*path);
+                }
             }
-        });
-        m_pngListener.setFilter(file::pick(file::PickMode::OpenFile, opts));
+        );
     }
 
     void onImagePicked(fs::path path) {
@@ -326,14 +330,19 @@ protected:
     }
 
     void pickPlist() {
-        file::FilePickOptions opts;
-        opts.filters.push_back({ "Plist file", { "*.plist" } });
-        m_plistListener.bind([this](Task<Result<fs::path>>::Event* event) {
-            if (auto res = event->getValue()) {
-                if (res->isOk()) this->importVariation(res->unwrap());
+        async::spawn(
+            file::pick(file::PickMode::OpenFile, file::FilePickOptions {
+                .filters = { file::FilePickOptions::Filter {
+                    .description = "Plist file",
+                    .files = { "*.plist" },
+                }}
+            }),
+            [self = Ref(this)](Result<std::optional<fs::path>> result) {
+                if (result.isOk()) {
+                    if (auto path = result.unwrap()) self->importVariation(*path);
+                }
             }
-        });
-        m_plistListener.setFilter(file::pick(file::PickMode::OpenFile, opts));
+        );
     }
 
     void importVariation(std::optional<fs::path> plist) {
@@ -393,8 +402,7 @@ protected:
 public:
     static VariationsPopup* create(GJGarageLayer* garage) {
         auto ret = new VariationsPopup();
-        ret->m_garage = garage;
-        if (ret->initAnchored(320.f, 250.f)) {
+        if (ret->init(garage)) {
             ret->autorelease();
             return ret;
         }
