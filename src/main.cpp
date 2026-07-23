@@ -471,11 +471,11 @@ struct $modify(CIGarageLayer, GJGarageLayer) {
             menu->addChild(btn);
             menu->updateLayout();
         } else {
-            auto menu = CCMenu::create();
+            auto fallback = CCMenu::create();
             auto win = CCDirector::sharedDirector()->getWinSize();
-            menu->setPosition({ win.width - 26.f, 75.f });
-            menu->addChild(btn);
-            this->addChild(menu, 10);
+            fallback->setPosition({ win.width - 26.f, 75.f });
+            fallback->addChild(btn);
+            this->addChild(fallback, 10);
         }
         return true;
     }
