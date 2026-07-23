@@ -39,34 +39,36 @@ static fs::path variationsDir(std::string const& base) {
     return Mod::get()->getSaveDir() / "variations" / base;
 }
 
-static std::string stripSlash(std::string s) {
-    while (!s.empty() && (s.back() == '/' || s.back() == '\\')) s.pop_back();
+static std::string pathKey(std::string s) {
+    for (auto& c : s) {
+        if (c == '\\') c = '/';
+    }
+    while (!s.empty() && s.back() == '/') s.pop_back();
     return s;
 }
 
+// register our override dir with Geode's priority-path list. Geode rebuilds
+// cocos' search paths from its own internal lists whenever packs/resources
+// change, so mutating setSearchPaths directly gets clobbered - addPriorityPath
+// is the mechanism that survives (it's what texture packs use).
 static void ensureSearchPath() {
-    auto fu = CCFileUtils::sharedFileUtils();
+    static bool s_added = false;
     std::error_code ec;
     fs::create_directories(activeDir() / "icons", ec);
-    auto want = activeDir().string();
-    auto wantKey = stripSlash(want);
-    std::vector<gd::string> paths;
-    paths.push_back(want);
-    for (auto const& p : fu->getSearchPaths()) {
-        if (stripSlash(std::string(p)) != wantKey) paths.push_back(p);
+    if (!s_added) {
+        s_added = true;
+        CCFileUtils::get()->addPriorityPath(activeDir().string().c_str());
     }
-    fu->setSearchPaths(paths);
 }
 
 // resolve a relative resource path while ignoring our own override directory
 static std::string pathWithoutOverride(std::string const& rel) {
     auto fu = CCFileUtils::sharedFileUtils();
-    auto ourKey = stripSlash(activeDir().string());
+    auto ourKey = pathKey(activeDir().string());
     std::error_code ec;
     for (auto const& sp : fu->getSearchPaths()) {
-        auto root = stripSlash(std::string(sp));
-        if (root == ourKey) continue;
-        auto cand = fs::path(root) / rel;
+        if (pathKey(std::string(sp)) == ourKey) continue;
+        auto cand = fs::path(std::string(sp)) / rel;
         if (fs::exists(cand, ec)) return cand.string();
     }
     return "";
@@ -74,17 +76,47 @@ static std::string pathWithoutOverride(std::string const& rel) {
 
 // ---------- cache surgery ----------
 
+// cocos' addSpriteFramesWithDictionary SKIPS frames that already exist, so a
+// sheet only truly reloads if every frame is first removed by name
+static void removeFramesFromPlist(std::string const& plistFullPath) {
+    auto dict = CCDictionary::createWithContentsOfFileThreadSafe(plistFullPath.c_str());
+    if (!dict) return;
+    if (auto frames = static_cast<CCDictionary*>(dict->objectForKey("frames"))) {
+        auto sfc = CCSpriteFrameCache::sharedSpriteFrameCache();
+        CCDictElement* el = nullptr;
+        CCDICT_FOREACH(frames, el) {
+            sfc->removeSpriteFrameByName(el->getStrKey());
+        }
+    }
+    dict->release();
+}
+
+// evict the sheet's texture object no matter what cache key it sits under
+static void dropSheetTexture(std::string const& base) {
+    auto sfc = CCSpriteFrameCache::sharedSpriteFrameCache();
+    auto tc = CCTextureCache::sharedTextureCache();
+    for (auto const& probe : { fmt::format("{}_001.png", base), fmt::format("{}_01_001.png", base) }) {
+        if (auto frame = sfc->spriteFrameByName(probe.c_str())) {
+            if (auto tex = frame->getTexture()) tc->removeTexture(tex);
+        }
+    }
+}
+
 // drop every cached form of a sheet so the next load re-resolves the files
 static void purgeSheet(std::string const& base) {
     auto fu = CCFileUtils::sharedFileUtils();
     auto sfc = CCSpriteFrameCache::sharedSpriteFrameCache();
     auto tc = CCTextureCache::sharedTextureCache();
+    dropSheetTexture(base);
     for (auto dir : { "icons/", "" }) {
         for (auto suf : { "-uhd", "-hd", "" }) {
             auto plist = fmt::format("{}{}{}.plist", dir, base, suf);
             std::string full = fu->fullPathForFilename(plist.c_str(), true);
             if (full != plist && fu->isFileExist(full)) {
+                removeFramesFromPlist(full);
                 sfc->removeSpriteFramesFromFile(plist.c_str());
+            } else if (auto game = pathWithoutOverride(plist); !game.empty()) {
+                removeFramesFromPlist(game);
             }
             auto png = fmt::format("{}{}{}.png", dir, base, suf);
             std::string fullPng = fu->fullPathForFilename(png.c_str(), true);
@@ -113,6 +145,7 @@ static void reloadSheet(std::string const& base) {
 }
 
 static void applyVariation(std::string const& base, std::string const& name) {
+    ensureSearchPath();
     purgeSheet(base);
 
     std::error_code ec;
