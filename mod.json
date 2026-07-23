@@ -6,5 +6,8 @@
     "version": "v1.0.0",
     "developer": "andre",
     "description": "Upload PNG files as switchable skins (variations) for any icon.",
-    "tags": ["customization"]
+    "tags": ["customization"],
+    "dependencies": {
+        "geode.node-ids": ">=v1.2.0"
+    }
 }

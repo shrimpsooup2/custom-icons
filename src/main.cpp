@@ -3,6 +3,7 @@
 #include <Geode/modify/LoadingLayer.hpp>
 #include <Geode/ui/Popup.hpp>
 #include <Geode/ui/ScrollLayer.hpp>
+#include <Geode/ui/BasedButtonSprite.hpp>
 #include <Geode/utils/file.hpp>
 #include <Geode/utils/async.hpp>
 #include <filesystem>
@@ -448,16 +449,34 @@ public:
 struct $modify(CIGarageLayer, GJGarageLayer) {
     bool init() {
         if (!GJGarageLayer::init()) return false;
-        auto spr = ButtonSprite::create("Skins");
-        spr->setScale(0.55f);
+
+        // GD-style circle button with the player's own cube as the icon
+        auto gm = GameManager::get();
+        auto icon = SimplePlayer::create(gm->getPlayerFrame());
+        icon->setColor(gm->colorForIdx(gm->getPlayerColor()));
+        icon->setSecondColor(gm->colorForIdx(gm->getPlayerColor2()));
+        if (gm->getPlayerGlow()) {
+            icon->setGlowOutline(gm->colorForIdx(gm->getPlayerGlowColor()));
+        }
+        auto spr = CircleButtonSprite::create(
+            icon, CircleBaseColor::Green, CircleBaseSize::Small);
         auto btn = CCMenuItemSpriteExtra::create(
             spr, this, menu_selector(CIGarageLayer::onCustomIcons));
         btn->setID("skins-button"_spr);
-        auto menu = CCMenu::create();
-        auto win = CCDirector::sharedDirector()->getWinSize();
-        menu->setPosition({ 42.f, win.height - 70.f });
-        menu->addChild(btn);
-        this->addChild(menu, 10);
+
+        // slot into the right-side shards/color column so the layout spaces
+        // everything without overlap; fall back to a free spot near the
+        // bottom-right if node ids are unavailable
+        if (auto menu = this->getChildByID("shards-menu")) {
+            menu->addChild(btn);
+            menu->updateLayout();
+        } else {
+            auto menu = CCMenu::create();
+            auto win = CCDirector::sharedDirector()->getWinSize();
+            menu->setPosition({ win.width - 26.f, 75.f });
+            menu->addChild(btn);
+            this->addChild(menu, 10);
+        }
         return true;
     }
     void onCustomIcons(CCObject*) {
